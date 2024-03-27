@@ -4,6 +4,7 @@ module Lib (
 ) where
 
 import Data.Bits (Bits (shiftL, shiftR), testBit, (.&.), (.|.))
+import Data.Heap (deleteMin, fromList, insert, size)
 import Data.Int (Int64)
 import Text.Printf (printf)
 
@@ -25,45 +26,16 @@ instance Ord HuffmanNode where
     compare (Internal f1 _ _) (Leaf f2 _) = compare f1 f2
     compare (Internal f1 _ _) (Internal f2 _ _) = compare f1 f2
 
--- MinHeap
-data MinHeap a = Empty | Node a (MinHeap a) (MinHeap a) deriving (Show)
-
--- Merge two heaps
-merge :: (Ord a) => MinHeap a -> MinHeap a -> MinHeap a
-merge Empty h = h
-merge h Empty = h
-merge h1@(Node x left1 right1) h2@(Node y left2 right2)
-    | x <= y = Node x (merge right1 h2) left1
-    | otherwise = Node y (merge h1 right2) left2
-
--- Insert an element into a heap
-push :: (Ord a) => a -> MinHeap a -> MinHeap a
-push x = merge (Node x Empty Empty)
-
--- Find the minimum element
-peek :: MinHeap a -> Maybe a
-peek Empty = Nothing
-peek (Node x _ _) = Just x
-
--- Pop the minimum element
-pop :: (Ord a) => MinHeap a -> (Maybe a, MinHeap a)
-pop Empty = (Nothing, Empty)
-pop (Node x left right) = (Just x, merge left right)
-
--- Build a heap from a list
-buildHeap :: (Ord a) => [a] -> MinHeap a
-buildHeap = foldr push Empty
-
 -- Huffman tree
 huffman :: [Char] -> HuffmanNode
-huffman = build . buildHeap . map (uncurry Leaf) . count
+huffman = build . fromList . map (uncurry Leaf) . count
   where
-    build heap = case pop heap of
-        (Nothing, _) -> error "Input is empty"
-        (Just x, Empty) -> x
-        (Just x, heap') -> case pop heap' of
-            (Nothing, _) -> error "Unreachable"
-            (Just y, heap'') -> build $ push (Internal (weight x + weight y) x y) heap''
+    build heap
+        | size heap == 1 = l
+        | otherwise = build $ insert (Internal (weight l + weight r) l r) $ deleteMin $ deleteMin heap
+      where
+        l = minimum heap
+        r = minimum $ deleteMin heap
     weight (Leaf f _) = f
     weight (Internal f _ _) = f
 
@@ -83,8 +55,8 @@ toList (Leaf f c) = [asInt $ Left (f, c)]
 toList (Internal f l r) = asInt (Right f) : toList l ++ toList r
 
 -- use preorder traversal of list to decode the tree recursively
-fromList :: [Int64] -> HuffmanNode
-fromList = fst . helper . map fromInt
+treeFromList :: [Int64] -> HuffmanNode
+treeFromList = fst . helper . map fromInt
   where
     helper (Right f : tail) = (Internal f l r, tail'')
       where
@@ -143,4 +115,4 @@ compress lst = (toChars encoded, len, toList tree)
     (encoded, len, tree) = encode lst
 
 decompress :: ([Char], Int, [Int64]) -> [Char]
-decompress (lst, len, tree) = decode (fromChars lst, len, fromList tree)
+decompress (lst, len, tree) = decode (fromChars lst, len, treeFromList tree)
